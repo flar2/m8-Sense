@@ -36,6 +36,10 @@
 #define ENABLE_VOTED	4	
 #define DELAY		5	
 
+//elementalx
+extern unsigned long arg_cpu_oc;
+
+
 struct clk_register_data {
 	char *name;
 	u32 offset;
