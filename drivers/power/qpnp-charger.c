@@ -253,9 +253,16 @@
 #define USB_MA_1600	(1600)
 
 #define VIN_MIN_4400_MV	4400
+#define POWER_BANK_DROP_DURATION_MS	3000
+#define POWER_BANK_WA_DETECT_TIME_MS	3000
 
 #define SAFETY_TIME_MAX_LIMIT		510
 #define SAFETY_TIME_8HR_TWICE		480
+
+#define POWER_BANK_WA_STEP1				(1)
+#define POWER_BANK_WA_STEP2				(1<<1)
+#define POWER_BANK_WA_STEP3				(1<<2)
+#define POWER_BANK_WA_STEP4				(1<<3)
 
 #define DWC3_DCP	2
 
@@ -352,6 +359,8 @@ struct qpnp_chg_chip {
 	int				regulate_vin_min_thr_mv;
 	int				lower_vin_min;
 	int				fake_battery_soc;
+	int				power_bank_wa_step;
+	int				power_bank_drop_usb_ma;
 	unsigned int			safe_current;
 	unsigned int			revision;
 	unsigned int			type;
@@ -385,15 +394,17 @@ struct qpnp_chg_chip {
 	struct alarm			reduce_power_stage_alarm;
 	struct work_struct		reduce_power_stage_work;
 	struct wake_lock		vin_collapse_check_wake_lock;
+	struct wake_lock		reverse_boost_wa_wake_lock;
 	bool				power_stage_workaround_running;
 	bool				power_stage_workaround_enable;
 };
 
 struct htc_chg_timer {
 	unsigned long last_do_jiffies;
+	unsigned long t_since_last_do_ms;
 	unsigned long total_time_ms;
 };
-static struct htc_chg_timer aicl_timer, retry_aicl_timer;
+static struct htc_chg_timer aicl_timer, retry_aicl_timer, usb_irq_timer;
 
 static bool flag_keep_charge_on;
 static bool flag_pa_recharge;
@@ -1120,6 +1131,7 @@ qpnp_arb_stop_work(struct work_struct *work)
 	if (!chip->chg_done)
 		qpnp_chg_charge_en(chip, !chip->charging_disabled);
 	qpnp_chg_force_run_on_batt(chip, chip->charging_disabled);
+	wake_unlock(&chip->reverse_boost_wa_wake_lock);
 }
 
 #if !(defined(CONFIG_HTC_BATT_8960))
@@ -1199,6 +1211,7 @@ qpnp_chg_usb_chg_gone_irq_handler(int irq, void *_chip)
 	pr_info("[irq]chg_gone triggered, usb_sts:0x%X\n", usb_sts);
 
 	if (qpnp_chg_is_usb_chg_plugged_in(chip) && (usb_sts & CHG_GONE_IRQ))
+		wake_lock_timeout(&chip->reverse_boost_wa_wake_lock, 2*HZ);
 		schedule_delayed_work(&chip->fix_reverse_boost_check_work,
 			msecs_to_jiffies(REVERSE_BOOST_CHECK_PERIOD_MS));
 
@@ -1240,7 +1253,9 @@ qpnp_fix_reverse_boost_check_work(struct work_struct *work)
 		qpnp_chg_force_run_on_batt(chip, 1);
 		schedule_delayed_work(&chip->arb_stop_work,
 			msecs_to_jiffies(ARB_STOP_WORK_MS));
-	}
+	} else
+		wake_unlock(&chip->reverse_boost_wa_wake_lock);
+
 }
 
 static irqreturn_t
@@ -1283,6 +1298,36 @@ qpnp_chg_coarse_det_usb_irq_handler(int irq, void *_chip)
 	return IRQ_HANDLED;
 }
 
+static void
+htc_power_bank_workaround_check(int usb_present)
+{
+	unsigned long time_since_last_update_ms = 0, cur_jiffies = 0;
+
+	if (the_chip->usb_present ^ usb_present) {
+		cur_jiffies = jiffies;
+		usb_irq_timer.t_since_last_do_ms = time_since_last_update_ms =
+			(cur_jiffies - usb_irq_timer.last_do_jiffies) * MSEC_PER_SEC / HZ;
+		usb_irq_timer.last_do_jiffies = cur_jiffies;
+	}
+
+	if (!usb_present) {
+		if (is_aicl_worker_enabled) {
+			the_chip->power_bank_drop_usb_ma =
+				qpnp_chg_usb_iusbmax_get(the_chip);
+
+			if (!the_chip->power_bank_wa_step)
+				the_chip->power_bank_wa_step = POWER_BANK_WA_STEP1;
+		} else {
+			if (usb_irq_timer.t_since_last_do_ms < POWER_BANK_WA_DETECT_TIME_MS
+					&& the_chip->power_bank_wa_step == POWER_BANK_WA_STEP2) {
+				the_chip->power_bank_wa_step = POWER_BANK_WA_STEP3;
+			} else
+				
+				the_chip->power_bank_wa_step = 0;
+		}
+	}
+}
+
 #define RESUME_VDDMAX_WORK_MS	2000
 #define VIN_MIN_COLLAPSE_CHECK_MS	350
 #define ENUM_T_STOP_BIT		BIT(0)
@@ -1294,10 +1339,17 @@ qpnp_chg_usb_usbin_valid_irq_handler(int irq, void *_chip)
 
 	usb_present = qpnp_chg_is_usb_chg_plugged_in(chip);
 	host_mode = qpnp_chg_is_otg_en_set(chip);
+
+	
+	if (chip->is_pm8921_aicl_enabled
+			&& !host_mode)
+		htc_power_bank_workaround_check(usb_present);
+
 	pr_info("[irq]usb_present: %d-> %d, host_mode:%d, usb_target_ma=%d, "
-			"aicl_worker=%d, is_vin_min_detected=%d\n",
+			"aicl_worker=%d, vin_min_detected=%d, duration_ms=%ld, step=%x\n",
 		chip->usb_present, usb_present, host_mode, usb_target_ma,
-		is_aicl_worker_enabled, is_vin_min_detected);
+		is_aicl_worker_enabled, is_vin_min_detected,
+		usb_irq_timer.t_since_last_do_ms, the_chip->power_bank_wa_step);
 
 	
 	if (host_mode)
@@ -2237,7 +2289,8 @@ static void _pm8941_charger_vbus_draw(unsigned int mA)
 	}
 
 	if (usb_target_ma <= USB_MA_2 && mA > usb_wall_threshold_ma
-			&& !hsml_target_ma) {
+			&& !hsml_target_ma
+			&& !the_chip->power_bank_wa_step) {
 		usb_target_ma = mA;
 		is_usb_target_ma_changed_by_qc20 = false;
 	}
@@ -2249,6 +2302,7 @@ static void _pm8941_charger_vbus_draw(unsigned int mA)
 	} else {
 		if (!hsml_target_ma
 				&& the_chip->is_pm8921_aicl_enabled
+				&& !the_chip->power_bank_wa_step
 				&& mA > usb_wall_threshold_ma)
 			__pm8941_charger_vbus_draw(usb_wall_threshold_ma);
 		else
@@ -2385,8 +2439,6 @@ static struct usb_ma_limit_entry usb_ma_table[] = {
 	{900},
 	{1000},
 	{1100},
-	{1200},
-	{1300},
 	{1400},
 	{1500},
 	{1600},
@@ -2706,6 +2758,9 @@ static void handle_usb_present_change(struct qpnp_chg_chip *chip,
 			qpnp_chg_usb_suspend_enable(chip, 1);
 			if (delayed_work_pending(&chip->resume_vddmax_configure_work))
 				__cancel_delayed_work(&chip->resume_vddmax_configure_work);
+			if (is_batt_full)
+				pm8941_bms_batt_full_fake_ocv();
+
 			vddmax_modify = false;
 			chip->chg_done = false;
 			chip->prev_usb_max_ma = -EINVAL;
@@ -2739,6 +2794,43 @@ static void handle_usb_present_change(struct qpnp_chg_chip *chip,
 
 		queue_delayed_work(chip->aicl_check_wq, &chip->aicl_check_work,
 			msecs_to_jiffies(AICL_CHECK_WAIT_PERIOD_MS));
+	}
+}
+
+static bool
+htc_power_bank_workaround_detect(void)
+{
+	if (the_chip->power_bank_wa_step
+			&& (usb_irq_timer.t_since_last_do_ms > VIN_MIN_COLLAPSE_CHECK_MS)
+			&& (usb_irq_timer.t_since_last_do_ms < POWER_BANK_DROP_DURATION_MS)
+			) {
+		return true;
+	} else {
+		
+		the_chip->power_bank_wa_step = 0;
+		return false;
+	}
+}
+
+static int
+htc_power_bank_set_pwrsrc(void)
+{
+	int usb_ma;
+
+	usb_ma = the_chip->power_bank_drop_usb_ma;
+
+	if (the_chip->power_bank_wa_step == POWER_BANK_WA_STEP1) {
+		the_chip->power_bank_wa_step = POWER_BANK_WA_STEP2;
+		increase_usb_ma_value(&usb_ma);
+		return usb_ma;
+	} else if (the_chip->power_bank_wa_step == POWER_BANK_WA_STEP3) {
+		the_chip->power_bank_wa_step = POWER_BANK_WA_STEP4;
+		decrease_usb_ma_value(&usb_ma);
+		return usb_ma;
+	} else {
+		
+		the_chip->power_bank_wa_step = 0;
+		return USB_MA_1500;
 	}
 }
 
@@ -2816,11 +2908,15 @@ int pm8941_set_pwrsrc_and_charger_enable(enum htc_power_source_type src,
 	case HTC_PWR_SOURCE_TYPE_9VAC:
 	case HTC_PWR_SOURCE_TYPE_MHL_AC:
 		if (the_chip->is_pm8921_aicl_enabled &&
-				!(get_kernel_flag() & KERNEL_FLAG_ENABLE_FAST_CHARGE))
-			
-			mA = USB_MA_1500;
-		else
+				!(get_kernel_flag() & KERNEL_FLAG_ENABLE_FAST_CHARGE)) {
+			if (htc_power_bank_workaround_detect())
+				mA = htc_power_bank_set_pwrsrc();
+			else
+				
+				mA = USB_MA_1500;
+		} else {
 			mA = USB_MA_1100;
+		}
 		break;
 	default:
 		mA = USB_MA_2;
@@ -2842,7 +2938,8 @@ int pm8941_set_pwrsrc_and_charger_enable(enum htc_power_source_type src,
 	}
 	pre_pwr_src = src;
 
-	pr_info("qpnp_chg_iusbmax_set :%dmA\n",mA);
+	pr_info("qpnp_chg_iusbmax_set=%dmA, power_bank_step=%x\n",
+			mA, the_chip->power_bank_wa_step);
 	_pm8941_charger_vbus_draw(mA);
 
 	if (HTC_PWR_SOURCE_TYPE_BATT == src)
@@ -4644,6 +4741,8 @@ qpnp_eoc_work(struct work_struct *work)
 	if (!qpnp_chg_is_usb_chg_plugged_in(chip) &&
 			!qpnp_chg_is_dc_chg_plugged_in(chip)) {
 		pr_info("no chg connected, stopping\n");
+		if (is_batt_full)
+				pm8941_bms_batt_full_fake_ocv();
 		is_batt_full = false;
 		is_batt_full_eoc_stop = false;
 		goto stop_eoc;
@@ -6454,7 +6553,9 @@ qpnp_charger_probe(struct spmi_device *spmi)
 	INIT_DELAYED_WORK(&chip->aicl_check_work, aicl_check_worker);
 	chip->aicl_check_wq = create_singlethread_workqueue("aicl_check_wq");
 	wake_lock_init(&chip->vin_collapse_check_wake_lock,
-			WAKE_LOCK_SUSPEND, "pm8921_vin_collapse_check_wake_lock");	
+			WAKE_LOCK_SUSPEND, "pm8921_vin_collapse_check_wake_lock");
+	wake_lock_init(&chip->reverse_boost_wa_wake_lock,
+		WAKE_LOCK_SUSPEND, "reverse_boost_wa_wake_lock");
 #endif
 
 #if !(defined(CONFIG_HTC_BATT_8960))

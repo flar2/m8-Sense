@@ -1058,7 +1058,7 @@ static int ncm_function_bind_config(struct android_usb_function *f,
 
     if (c->cdev->gadget)
         c->cdev->gadget->miMaxMtu = ETH_FRAME_LEN_MAX - ETH_HLEN;
-	ret = gether_setup_name(c->cdev->gadget, ncm->ethaddr, "usb");
+	ret = gether_setup_name(c->cdev->gadget, ncm->ethaddr, "ncm");
 	if (ret) {
 		pr_err("%s: gether setup failed err:%d\n", __func__, ret);
 		return ret;
@@ -3035,13 +3035,15 @@ static ssize_t bugreport_debug_store(struct device *pdev,
 	int enable = 0, ats = 0;
 	sscanf(buff, "%d", &enable);
 	ats = board_get_usb_ats();
-	if (enable && ats)
+	
+	if (enable == 5 && ats)
 		bugreport_debug = 1;
-	else {
+	else if (enable == 0 && ats) {
 		bugreport_debug = 0;
 		del_timer(&adb_read_timer);
 	}
-	pr_info("bugreport_debug = %d, ats = %d\n", enable, ats);
+	pr_info("bugreport_debug = %d, enable=%d, ats = %d\n", bugreport_debug, enable, ats);
+
 	return size;
 }
 

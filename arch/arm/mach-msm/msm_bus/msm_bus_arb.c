@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -259,6 +259,21 @@ static int getpath(int src, int dest)
 	return CREATE_PNODE_ID(src, pnode_num);
 }
 
+static uint64_t get_node_maxib(struct msm_bus_inode_info *info)
+{
+	int i, ctx;
+	uint64_t maxib = 0;
+
+	for (i = 0; i <= info->num_pnodes; i++) {
+		for (ctx = 0; ctx < NUM_CTX; ctx++)
+			maxib = max(info->pnode[i].clk[ctx], maxib);
+	}
+
+	MSM_BUS_DBG("%s: Node %d numpnodes %d maxib %llu", __func__,
+		info->num_pnodes, info->node_info->id, maxib);
+	return maxib;
+}
+
 static int update_path(int curr, int pnode, uint64_t req_clk, uint64_t req_bw,
 	uint64_t curr_clk, uint64_t curr_bw, unsigned int ctx, unsigned int
 	cl_active_flag)
@@ -290,10 +305,6 @@ static int update_path(int curr, int pnode, uint64_t req_clk, uint64_t req_bw,
 		return -ENXIO;
 	}
 
-	if (info->node_info->dual_conf)
-		fabdev->algo->config_master(fabdev, info,
-			req_clk, req_bw);
-
 	info->link_info.sel_bw = &info->link_info.bw[ctx];
 	info->link_info.sel_clk = &info->link_info.clk[ctx];
 	*info->link_info.sel_bw += add_bw;
@@ -303,6 +314,14 @@ static int update_path(int curr, int pnode, uint64_t req_clk, uint64_t req_bw,
 	info->pnode[index].sel_clk = &info->pnode[index].clk[ctx &
 		cl_active_flag];
 	*info->pnode[index].sel_bw += add_bw;
+	*info->pnode[index].sel_clk = req_clk;
+
+	if (info->node_info->dual_conf) {
+		uint64_t node_maxib = 0;
+		node_maxib = get_node_maxib(info);
+		fabdev->algo->config_master(fabdev, info,
+			node_maxib, req_bw);
+	}
 
 	info->link_info.num_tiers = info->node_info->num_tiers;
 	info->link_info.tier = info->node_info->tier;

@@ -213,6 +213,10 @@ static void end_buffer_async_read(struct buffer_head *bh, int uptodate)
 	BUG_ON(!buffer_async_read(bh));
 
 	page = bh->b_page;
+	if (!page_has_buffers(page)) {
+		WARN(1, "%s: page %p has no buffers\n", __func__, page);
+		return;
+	}
 	if (uptodate) {
 		set_buffer_uptodate(bh);
 	} else {

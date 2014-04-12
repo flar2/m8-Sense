@@ -991,16 +991,31 @@ static int mmc_wait_for_data_req_done(struct mmc_host *host,
 	return err;
 }
 
+#define MMC_REQUEST_TIMEOUT	10000 
 static void mmc_wait_for_req_done(struct mmc_host *host,
 				  struct mmc_request *mrq)
 {
 	struct mmc_command *cmd;
+	unsigned long timeout;
+	int ret;
 
 	while (1) {
-		wait_for_completion_io(&mrq->completion);
-
 		cmd = mrq->cmd;
+		
+		if (cmd->cmd_timeout_ms > MMC_REQUEST_TIMEOUT)
+			timeout = (cmd->cmd_timeout_ms * 2) + 3000;
+		else
+			timeout = MMC_REQUEST_TIMEOUT + 3000;
+		ret = wait_for_completion_io_timeout(&mrq->completion,
+			msecs_to_jiffies(timeout));
 
+		if (ret == 0) {
+			pr_err("%s: CMD%u %s timeout (%lums)\n",
+					mmc_hostname(host), cmd->opcode,
+					__func__, timeout);
+			cmd->error = -ETIMEDOUT;
+			break;
+		}
 		if (cmd->ignore_timeout && cmd->error == -ETIMEDOUT)
 			break;
 
@@ -1834,6 +1849,16 @@ void mmc_power_up(struct mmc_host *host)
 
 void mmc_power_off(struct mmc_host *host)
 {
+	int err;
+
+	if (host && mmc_is_sd_host(host) && host->card && mmc_card_present(host->card) && !host->card->do_remove) {
+		mmc_claim_host(host);
+		err = mmc_go_idle(host);
+		if (err)
+			pr_err("%s: cmd0 err %d\n", mmc_hostname(host), err);
+		mmc_release_host(host);
+	}
+
 	mmc_host_clk_hold(host);
 
 	host->ios.clock = 0;
@@ -1859,7 +1884,7 @@ void mmc_power_cycle(struct mmc_host *host)
 {
 	mmc_power_off(host);
 	
-	mmc_delay(1);
+	mmc_delay(50);
 	mmc_power_up(host);
 }
 
@@ -1902,7 +1927,7 @@ int mmc_resume_bus(struct mmc_host *host)
 		return -EINVAL;
 
 	printk("%s: Starting deferred resume\n", mmc_hostname(host));
-	if (!pm_runtime_suspended(&host->class_dev))
+	if (!pm_runtime_suspended(&host->class_dev) || mmc_is_sd_host(host))
 		need_manual_resume = 1;
 	mmc_rpm_hold(host, &host->card->dev);
 	mmc_claim_host(host);
@@ -1982,8 +2007,6 @@ void mmc_detach_bus(struct mmc_host *host)
 
 	spin_unlock_irqrestore(&host->lock, flags);
 
-	mmc_power_off(host);
-
 	mmc_bus_put(host);
 }
 
@@ -2039,9 +2062,12 @@ void mmc_remove_sd_card(struct work_struct *work)
 	if (host->bus_ops && !host->bus_dead) {
 		if (host->bus_ops->remove)
 			host->bus_ops->remove(host);
+		mmc_rpm_hold(host, &host->class_dev);
 		mmc_claim_host(host);
 		mmc_detach_bus(host);
+		mmc_power_off(host);
 		mmc_release_host(host);
+		mmc_rpm_release(host, &host->class_dev);
 	}
 	mmc_bus_put(host);
 	wake_unlock(&mmc_removal_work_wake_lock);
@@ -3277,12 +3303,15 @@ int mmc_suspend_host(struct mmc_host *host)
 
 		if (!err) {
 			if (host->bus_ops->suspend) {
-				err = mmc_stop_bkops(host->card);
-				if (err)
-					goto stop_bkops_err;
+				if (mmc_is_mmc_host(host)) {
+					err = mmc_stop_bkops(host->card);
+					if (err)
+						goto stop_bkops_err;
+				}
 				err = host->bus_ops->suspend(host);
-				MMC_UPDATE_BKOPS_STATS_SUSPEND(host->
-						card->bkops_info.bkops_stats);
+				if (mmc_is_mmc_host(host))
+					MMC_UPDATE_BKOPS_STATS_SUSPEND(host->
+							card->bkops_info.bkops_stats);
 			}
 			if (!(host->card && mmc_card_sdio(host->card)))
 				mmc_release_host(host);

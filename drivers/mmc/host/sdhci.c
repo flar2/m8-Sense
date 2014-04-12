@@ -2214,6 +2214,29 @@ static void sdhci_tuning_timer(unsigned long data)
 	spin_unlock_irqrestore(&host->lock, flags);
 }
 
+static void sdhci_underclocking(struct sdhci_host *host)
+{
+	switch (host->mmc->ios.timing) {
+		case MMC_TIMING_UHS_SDR12:
+			host->mmc->caps &= ~MMC_CAP_UHS_SDR12;
+		case MMC_TIMING_UHS_SDR25:
+			host->mmc->caps &= ~MMC_CAP_UHS_SDR25;
+		case MMC_TIMING_UHS_SDR50:
+			host->mmc->caps &= ~MMC_CAP_UHS_SDR50;
+		case MMC_TIMING_UHS_DDR50:
+			host->mmc->caps &= ~MMC_CAP_UHS_DDR50;
+		case MMC_TIMING_UHS_SDR104:
+			host->mmc->caps &= ~MMC_CAP_UHS_SDR104;
+			break;
+		default:
+			pr_err("%s: %s: unknow timing : %d\n", mmc_hostname(host->mmc),
+					__func__, host->mmc->ios.timing);
+			break;
+	}
+	pr_err("%s: %s: disable clock : %d\n", mmc_hostname(host->mmc),
+		   __func__, host->mmc->ios.timing);
+}
+
 
 static void sdhci_cmd_irq(struct sdhci_host *host, u32 intmask)
 {
@@ -2244,11 +2267,8 @@ static void sdhci_cmd_irq(struct sdhci_host *host, u32 intmask)
 			(host->cmd->opcode != MMC_SEND_TUNING_BLOCK)) {
 			pr_err("%s: CMD%d: Command CRC error\n",
 					mmc_hostname(host->mmc), host->cmd->opcode);
-			if (mmc_is_sd_host(host->mmc)) {
-				host->mmc->caps &= ~MMC_CAP_UHS_SDR104;
-				pr_err("%s: %s: disable SDR104\n",
-					mmc_hostname(host->mmc), __func__);
-			}
+			if (mmc_is_sd_host(host->mmc))
+				sdhci_underclocking(host);
 		}
 	} else if (intmask & (SDHCI_INT_END_BIT |
 			SDHCI_INT_INDEX))
@@ -2391,11 +2411,8 @@ static void sdhci_data_irq(struct sdhci_host *host, u32 intmask)
 					mmc_hostname(host->mmc));
 			pr_err("%s: opcode 0x%.8x\n", __func__,
 					command);
-			if (mmc_is_sd_host(host->mmc)) {
-				host->mmc->caps &= ~MMC_CAP_UHS_SDR104;
-				pr_err("%s: %s: disable SDR104\n",
-					mmc_hostname(host->mmc), __func__);
-			}
+			if (mmc_is_sd_host(host->mmc))
+				sdhci_underclocking(host);
 		}
 	} else if (intmask & SDHCI_INT_ADMA_ERROR) {
 		pr_err("%s: ADMA error\n", mmc_hostname(host->mmc));
@@ -2968,6 +2985,9 @@ int sdhci_add_host(struct sdhci_host *host)
 	
 	if (caps[1] & SDHCI_USE_SDR50_TUNING)
 		host->flags |= SDHCI_SDR50_NEEDS_TUNING;
+
+	
+	mmc->caps_uhs = mmc->caps;
 
 	
 	if (mmc->caps2 & MMC_CAP2_HS200)

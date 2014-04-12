@@ -365,6 +365,18 @@ int mmc_is_sd_host(struct mmc_host *mmc)
 	return is_sd_platform(msm_host->pdata);
 }
 
+int mmc_is_mmc_host(struct mmc_host *mmc)
+{
+	struct sdhci_host *host = mmc_priv(mmc);
+	struct sdhci_pltfm_host *pltfm_host;
+	struct sdhci_msm_host *msm_host;
+
+	pltfm_host = sdhci_priv(host);
+	msm_host = pltfm_host->priv;
+
+	return is_mmc_platform(msm_host->pdata);
+
+}
 static inline int msm_dll_poll_ck_out_en(struct sdhci_host *host,
 						u8 poll)
 {

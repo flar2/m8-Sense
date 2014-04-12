@@ -817,6 +817,7 @@ static void dwc3_otg_sm_work(struct work_struct *w)
 			dev_dbg(phy->dev, "id\n");
 			dwc3_otg_start_host(&dotg->otg, 0);
 			phy->state = OTG_STATE_B_IDLE;
+			clear_bit(B_SESS_VLD, &dotg->inputs);
 			dotg->vbus_retry_count = 0;
 			work = 1;
 		}

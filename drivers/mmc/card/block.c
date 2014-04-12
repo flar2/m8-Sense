@@ -2434,21 +2434,9 @@ static int sd_blk_issue_rw_rq(struct mmc_queue *mq, struct request *rqc)
 		case MMC_BLK_RETRY:
 			if (retry++ < 2 && card->do_remove == 0)
 				break;
-			
-			try_recovery++;
-			if (try_recovery <= MMC_REQ_RECOVER_MAX && card->do_remove == 0) {
-				do_reinit = 1;
-				goto recovery;
-			} else {
-				card->do_remove = 1;
-				goto cmd_abort;
-			}
 		case MMC_BLK_ABORT:
 		case MMC_BLK_CMD_ERR:
 		case MMC_BLK_DATA_ERR: {
-			int err;
-
-			err = mmc_blk_reset(md, card->host, type);
 			
 			try_recovery++;
 			if (try_recovery <= MMC_REQ_RECOVER_MAX && card->do_remove == 0) {
@@ -2512,17 +2500,18 @@ recovery:
 			do_reinit = 0;
 			if (mmc_card_removed(card) || card->do_remove) {
 				printk(KERN_INFO "%s: Card already removed. STOP reinit card\n",
-				mmc_hostname(card->host));
+					mmc_hostname(card->host));
 				goto cmd_abort;
 			}
 			printk(KERN_INFO "%s: reinit card\n",
 				mmc_hostname(card->host));
-			err = mmc_reinit_card(card->host);
+			err = mmc_blk_reset(md, card->host, 0);
 			if (!err) {
 				mmc_blk_rw_rq_prep(mq_rq, card, 0, mq);
 				mmc_start_req(card->host, &mq_rq->mmc_active, NULL);
 			} else {
-				printk(KERN_INFO "%s: reinit failed, remove card\n", mmc_hostname(card->host));
+				printk(KERN_INFO "%s: reinit failed : %d, remove card\n",
+					mmc_hostname(card->host), err);
 				card->do_remove = 1;
 				goto cmd_abort;
 			}
@@ -2587,6 +2576,7 @@ static int sd_blk_issue_rq(struct mmc_queue *mq, struct request *req)
 		if (host->ops->get_cd && host->ops->get_cd(host) == 0) {
 			pr_err("%s: card already removed, %s\n",
 				mmc_hostname(card->host), __func__);
+			remove_card(card->host);
 			if (req)
 				blk_end_request_all(req, -EIO);
 			return 0;

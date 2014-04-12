@@ -60,6 +60,7 @@ struct msm_cpp_timer_t {
 	atomic_t used;
 	struct msm_cpp_timer_data_t data;
 	struct timer_list cpp_timer;
+	atomic_t timeout_work; 
 };
 
 struct msm_cpp_timer_t cpp_timer;
@@ -603,6 +604,7 @@ void msm_cpp_do_tasklet(unsigned long data)
 					CPP_DBG("delete timer.\n");
 					timer = &cpp_timer;
 					atomic_set(&timer->used, 0);
+					atomic_set(&timer->timeout_work, 0); 
 					del_timer(&timer->cpp_timer);
 					timer->data.processed_frame = NULL;
 					msm_cpp_notify_frame_done(cpp_dev);
@@ -612,6 +614,7 @@ void msm_cpp_do_tasklet(unsigned long data)
 					CPP_DBG("delete timer.\n");
 					timer = &cpp_timer;
 					atomic_set(&timer->used, 0);
+					atomic_set(&timer->timeout_work, 0); 
 					del_timer(&timer->cpp_timer);
 					timer->data.processed_frame = NULL;
 					msm_cpp_notify_frame_done(cpp_dev);
@@ -1107,6 +1110,21 @@ static void msm_cpp_do_timeout_work(struct work_struct *work)
 		pr_err("Delayed trigger, IRQ serviced\n");
 		return;
 	}
+
+	
+	if (atomic_read(&cpp_timer.timeout_work)) {
+		struct msm_cpp_timer_t *timer = NULL;
+		pr_err("delete timer.\n");
+		timer = &cpp_timer;
+		atomic_set(&timer->used, 0);
+		atomic_set(&timer->timeout_work, 0); 
+		del_timer(&timer->cpp_timer);
+		timer->data.processed_frame = NULL;
+		msm_cpp_notify_frame_done(timer->data.cpp_dev);
+		return;
+	}
+	atomic_set(&cpp_timer.timeout_work, 1);
+	
 
 	disable_irq(cpp_timer.data.cpp_dev->irq->start);
 	pr_err("Reloading firmware\n");
@@ -1882,6 +1900,7 @@ static int __devinit cpp_probe(struct platform_device *pdev)
 	cpp_dev->is_firmware_loaded = 0;
 	cpp_timer.data.cpp_dev = cpp_dev;
 	atomic_set(&cpp_timer.used, 0);
+	atomic_set(&cpp_timer.timeout_work, 0); 
 	cpp_dev->fw_name_bin = NULL;
 	return rc;
 ERROR3:

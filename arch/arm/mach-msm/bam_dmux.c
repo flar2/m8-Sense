@@ -2372,6 +2372,13 @@ static int bam_dmux_probe(struct platform_device *pdev)
 	return 0;
 }
 
+void bam_change_adaptive_timer(int mode)
+{
+	bam_adaptive_timer_enabled = mode;
+	printk("\nchange bam_adaptive_timer_enabled=%d\n", bam_adaptive_timer_enabled);
+}
+EXPORT_SYMBOL(bam_change_adaptive_timer);
+
 static struct of_device_id msm_match_table[] = {
 	{.compatible = "qcom,bam_dmux"},
 	{},

@@ -60,9 +60,17 @@ static int send_first_buffer = 0;
 #define DSP_NUM_OUTPUT_FRAME_BUFFERED	2
 
 #define COMPR_PLAYBACK_MIN_FRAGMENT_SIZE (8 * 1024)
+
+#ifdef CONFIG_HD_AUDIO
+extern void store_asm_topology(uint32_t topology, uint32_t session);
+
+#define COMPR_PLAYBACK_MAX_FRAGMENT_SIZE (256 * 1024)
+#define COMPR_PLAYBACK_MAX_NUM_FRAGMENTS (16 * 8)
+#else
 #define COMPR_PLAYBACK_MAX_FRAGMENT_SIZE (128 * 1024)
-#define COMPR_PLAYBACK_MIN_NUM_FRAGMENTS (4)
 #define COMPR_PLAYBACK_MAX_NUM_FRAGMENTS (16 * 4)
+#endif
+#define COMPR_PLAYBACK_MIN_NUM_FRAGMENTS (4)
 
 #define COMPRESSED_LR_VOL_MAX_STEPS	0x2000
 const DECLARE_TLV_DB_LINEAR(msm_compr_vol_gain, 0,
@@ -400,11 +408,19 @@ static void populate_codec_list(struct msm_compr_audio *prtd)
 			COMPR_PLAYBACK_MIN_NUM_FRAGMENTS;
 	prtd->compr_cap.max_fragments =
 			COMPR_PLAYBACK_MAX_NUM_FRAGMENTS;
+#ifdef CONFIG_HD_AUDIO
+	prtd->compr_cap.num_codecs = 5;
+#else
 	prtd->compr_cap.num_codecs = 4;
+#endif
 	prtd->compr_cap.codecs[0] = SND_AUDIOCODEC_MP3;
 	prtd->compr_cap.codecs[1] = SND_AUDIOCODEC_AAC;
 	prtd->compr_cap.codecs[2] = SND_AUDIOCODEC_AC3;
 	prtd->compr_cap.codecs[3] = SND_AUDIOCODEC_EAC3;
+#ifdef CONFIG_HD_AUDIO
+	
+	prtd->compr_cap.codecs[4] = SND_AUDIOCODEC_PCM;
+#endif
 }
 
 static int msm_compr_send_media_format_block(struct snd_compr_stream *cstream,
@@ -434,6 +450,18 @@ static int msm_compr_send_media_format_block(struct snd_compr_stream *cstream,
 		break;
 	case FORMAT_EAC3:
 		break;
+#ifdef CONFIG_HD_AUDIO
+	case FORMAT_LINEAR_PCM:
+		pr_debug("FORMAT_LINEAR_PCM SR %d, CH %d",
+				prtd->sample_rate, prtd->num_channels);
+		ret = q6asm_media_format_block_pcm_format_support(
+			prtd->audio_client, prtd->sample_rate,
+			prtd->num_channels, prtd->bits_per_sample);
+
+		if (ret < 0)
+			pr_err("PCM Format block failed = %d\n", ret);
+		break;
+#endif
 	default:
 		pr_debug("%s, unsupported format, skip", __func__);
 		break;
@@ -468,7 +496,16 @@ static int msm_compr_configure_dsp(struct snd_compr_stream *cstream)
 	}
 	prtd->bits_per_sample = bits_per_sample;
 
-	pr_debug("%s\n", __func__);
+	pr_debug("%s: stream_id %d\n", __func__, ac->stream_id);
+
+#ifdef CONFIG_HD_AUDIO
+	if ((prtd->codec == FORMAT_LINEAR_PCM) &&
+	    (prtd->sample_rate > 48000)) {
+		pr_info("ASM_STREAM_POSTPROC_TOPO_ID_DEFAULT");
+		store_asm_topology(ASM_STREAM_POSTPROC_TOPO_ID_DEFAULT, prtd->audio_client->session);
+	}
+#endif
+
 	ret = q6asm_open_write_v2(ac,
 				prtd->codec, bits_per_sample
 );
@@ -574,6 +611,9 @@ static int msm_compr_open(struct snd_compr_stream *cstream)
 	prtd->byte_offset = 0;
 	prtd->sample_rate = 44100;
 	prtd->num_channels = 2;
+#ifdef CONFIG_HD_AUDIO
+	prtd->bits_per_sample = 16;
+#endif
 	prtd->drain_ready = 0;
 	prtd->last_buffer = 0;
 	prtd->first_buffer = 1;
@@ -722,6 +762,23 @@ static int msm_compr_set_params(struct snd_compr_stream *cstream,
 	case SNDRV_PCM_RATE_48000:
 		prtd->sample_rate = 48000;
 		break;
+#ifdef CONFIG_HD_AUDIO
+	case SNDRV_PCM_RATE_64000:
+		prtd->sample_rate = 64000;
+		break;
+	case SNDRV_PCM_RATE_88200:
+		prtd->sample_rate = 88200;
+		break;
+	case SNDRV_PCM_RATE_96000:
+		prtd->sample_rate = 96000;
+		break;
+	case SNDRV_PCM_RATE_176400:
+		prtd->sample_rate = 176400;
+		break;
+	case SNDRV_PCM_RATE_192000:
+		prtd->sample_rate = 192000;
+		break;
+#endif
 	}
 
 	pr_debug("%s: sample_rate %d\n", __func__, prtd->sample_rate);
@@ -751,10 +808,27 @@ static int msm_compr_set_params(struct snd_compr_stream *cstream,
 		break;
 	}
 
+#ifdef CONFIG_HD_AUDIO
+	case SND_AUDIOCODEC_PCM: {
+		pr_err("SND_AUDIOCODEC_PCM format = %d\n",
+				prtd->codec_param.codec.format);
+		prtd->codec = FORMAT_LINEAR_PCM;
+		prtd->bits_per_sample = prtd->codec_param.codec.format;
+		break;
+	}
+#endif
+
 	default:
 		pr_err("codec not supported, id =%d\n", params->codec.id);
 		return -EINVAL;
 	}
+
+#ifdef CONFIG_HD_AUDIO
+	if ((prtd->codec != FORMAT_LINEAR_PCM) && (prtd->sample_rate > 48000)) {
+		pr_err("Out of bounds sample rate for codec %d", prtd->codec);
+		return -EINVAL;
+	}
+#endif
 
 	delay_time_ms = ((DSP_NUM_OUTPUT_FRAME_BUFFERED * frame_sz * 1000) /
 			prtd->sample_rate) + DSP_PP_BUFFERING_IN_MSEC;
@@ -1253,7 +1327,11 @@ static int msm_compr_get_codec_caps(struct snd_compr_stream *cstream,
 
 	switch (codec->codec) {
 	case SND_AUDIOCODEC_MP3:
+#ifdef CONFIG_HD_AUDIO
+		codec->num_descriptors = 3;
+#else
 		codec->num_descriptors = 2;
+#endif
 		codec->descriptor[0].max_ch = 2;
 		codec->descriptor[0].sample_rates = SNDRV_PCM_RATE_8000_48000;
 		codec->descriptor[0].bit_rate[0] = 320; 
@@ -1264,7 +1342,11 @@ static int msm_compr_get_codec_caps(struct snd_compr_stream *cstream,
 		codec->descriptor[0].formats = 0;
 		break;
 	case SND_AUDIOCODEC_AAC:
+#ifdef CONFIG_HD_AUDIO
+		codec->num_descriptors = 3;
+#else
 		codec->num_descriptors = 2;
+#endif
 		codec->descriptor[1].max_ch = 2;
 		codec->descriptor[1].sample_rates = SNDRV_PCM_RATE_8000_48000;
 		codec->descriptor[1].bit_rate[0] = 320; 
@@ -1280,6 +1362,19 @@ static int msm_compr_get_codec_caps(struct snd_compr_stream *cstream,
 		break;
 	case SND_AUDIOCODEC_EAC3:
 		break;
+#ifdef CONFIG_HD_AUDIO
+	case SND_AUDIOCODEC_PCM:
+		codec->num_descriptors = 3;
+		codec->descriptor[2].max_ch = 2;
+		codec->descriptor[2].sample_rates = SNDRV_PCM_RATE_8000_192000;
+		codec->descriptor[2].bit_rate[0] = 192; 
+		codec->descriptor[2].bit_rate[1] = 8;
+		codec->descriptor[2].num_bitrates = 2;
+		codec->descriptor[2].profiles = 0;
+		codec->descriptor[2].modes = 0;
+		codec->descriptor[2].formats = 0;
+		break;
+#endif
 	default:
 		pr_err("%s: Unsupported audio codec %d\n",
 			__func__, codec->codec);

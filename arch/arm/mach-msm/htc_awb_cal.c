@@ -49,6 +49,7 @@ struct qct_awb_lsc_struct{
 	unsigned long int aec_caBuff[9]; 
 	unsigned long int alight_caBuff[8]; 
 	unsigned long int dualflashcaBuff[12];  
+	unsigned long int awb_verify;
 };
 
 static unsigned char cam_awb_ram[AWB_CAL_MAX_SIZE];

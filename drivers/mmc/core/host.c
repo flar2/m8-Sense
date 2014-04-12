@@ -47,6 +47,9 @@ static int mmc_host_runtime_suspend(struct device *dev)
 	if (!mmc_use_core_runtime_pm(host))
 		return 0;
 
+	if (mmc_is_sd_host(host))
+		return 0;
+
 	ret = mmc_suspend_host(host);
 	if (ret < 0)
 		pr_err("%s: %s: suspend host failed: %d\n", mmc_hostname(host),
@@ -63,6 +66,8 @@ static int mmc_host_runtime_resume(struct device *dev)
 	if (!mmc_use_core_runtime_pm(host))
 		return 0;
 
+	if (mmc_is_sd_host(host))
+		return 0;
 	ret = mmc_resume_host(host);
 	if (ret < 0) {
 		pr_err("%s: %s: resume host: failed: ret: %d\n",
@@ -83,7 +88,7 @@ static int mmc_host_suspend(struct device *dev)
 		return 0;
 	pr_info("%s: %s\n", mmc_hostname(host), __func__);
 
-	if (!pm_runtime_suspended(dev)) {
+	if (!pm_runtime_suspended(dev) || mmc_is_sd_host(host)) {
 		ret = mmc_suspend_host(host);
 		if (ret < 0)
 			pr_err("%s: %s: failed: ret: %d\n", mmc_hostname(host),
@@ -100,12 +105,12 @@ static int mmc_host_resume(struct device *dev)
 	if (!mmc_use_core_pm(host))
 		return 0;
 	pr_info("%s: %s\n", mmc_hostname(host), __func__);
-
-	if (mmc_bus_manual_resume(host)) {
+	if (mmc_bus_manual_resume(host) && host->card) {
 		host->bus_resume_flags |= MMC_BUSRESUME_NEEDS_RESUME;
 		return 0;
 	}
-	if (!pm_runtime_suspended(dev)) {
+
+	if (!pm_runtime_suspended(dev) || mmc_is_sd_host(host)) {
 		ret = mmc_resume_host(host);
 		if (ret < 0)
 			pr_err("%s: %s: failed: ret: %d\n", mmc_hostname(host),

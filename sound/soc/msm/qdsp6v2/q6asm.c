@@ -1788,8 +1788,8 @@ static int __q6asm_open_write(struct audio_client *ac, uint32_t format,
 		pr_err("%s: APR handle NULL\n", __func__);
 		return -EINVAL;
 	}
-	pr_info("%s: session[%d] wr_format[0x%x] bits_per_sample %d stream_id %d", __func__, ac->session,
-		format,bits_per_sample,stream_id);
+	pr_info("%s: session[%d] wr_format[0x%x] bits_per_sample %d stream_id %d, ac->io_mode=%d",
+	__func__, ac->session, format,bits_per_sample,stream_id, ac->io_mode);
 
 	q6asm_stream_add_hdr(ac, &open.hdr, sizeof(open), TRUE, stream_id);
 
@@ -1815,7 +1815,9 @@ static int __q6asm_open_write(struct audio_client *ac, uint32_t format,
 			open.postprocopo_id = ASM_STREAM_POSTPROC_TOPO_ID_NONE;
 		} else if (ac->io_mode & COMPRESSED_IO) {
 			open.postprocopo_id = HTC_POPP_TOPOLOGY;
+			pr_info("HTC_POPP_TOPOLOGY");
 		} else {
+			pr_info("ASM_STREAM_POSTPROC_TOPO_ID_DEFAULT");
 			open.postprocopo_id = ASM_STREAM_POSTPROC_TOPO_ID_DEFAULT;
 		}
 	}
@@ -2638,6 +2640,9 @@ static int __q6asm_media_format_block_pcm(struct audio_client *ac,
 	fmt.bits_per_sample = bits_per_sample;
 	fmt.sample_rate = rate;
 	fmt.is_signed = 1;
+#ifdef CONFIG_HD_AUDIO
+	fmt.reserved = 0;
+#endif
 
 	channel_mapping = fmt.channel_mapping;
 

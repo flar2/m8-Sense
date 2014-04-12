@@ -432,6 +432,10 @@ int htc_charger_event_notify(enum htc_charger_event event)
 	case HTC_CHARGER_EVENT_VBUS_OUT:
 	case HTC_CHARGER_EVENT_SRC_NONE: 
 		latest_chg_src = CHARGER_BATTERY;
+		if (delayed_work_pending(&htc_batt_timer.unknown_usb_detect_work)) {
+			cancel_delayed_work_sync(&htc_batt_timer.unknown_usb_detect_work);
+			wake_unlock(&htc_batt_timer.unknown_usb_detect_lock);
+		}
 		htc_batt_schedule_batt_info_update();
 		break;
 	case HTC_CHARGER_EVENT_SRC_USB: 
@@ -1636,7 +1640,9 @@ static void batt_level_adjust(unsigned long time_since_last_update_ms)
 						htc_batt_info.rep.batt_current);
 		} else {
 			
-			if (prev_level < 20)
+			
+			if ((htc_batt_info.rep.level_raw < 30) ||
+					(prev_level - prev_raw_level > 10))
 				allow_drop_one_percent_flag = true;
 
 			

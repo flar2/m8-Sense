@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1866,8 +1866,9 @@ static void msm_bus_bimc_update_bw(struct msm_bus_inode_info *hop,
 			qbw.thm = bw;
 			
 			qbw.thh = div_s64((110 * bw), 100);
-			msm_bus_bimc_set_qos_bw(binfo,
-				info->node_info->qport[i], &qbw);
+			if (!info->node_info->dual_conf)
+				msm_bus_bimc_set_qos_bw(binfo,
+					info->node_info->qport[i], &qbw);
 		}
 	}
 
@@ -1875,13 +1876,9 @@ skip_mas_bw:
 	ports = hop->node_info->num_sports;
 	MSM_BUS_DBG("BIMC: ID: %d, Sports: %d\n", hop->node_info->priv_id,
 		ports);
-	if (ports)
-		bw = INTERLEAVED_BW(fab_pdata, add_bw, ports);
-	else
-		return;
 
 	for (i = 0; i < ports; i++) {
-		sel_cd->slv[hop->node_info->slavep[i]].bw += bw;
+		sel_cd->slv[hop->node_info->slavep[i]].bw += add_bw;
 		sel_cd->slv[hop->node_info->slavep[i]].hw_id =
 			hop->node_info->slv_hw_id;
 		MSM_BUS_DBG("BIMC: Update slave_bw: ID: %d -> %llu\n",

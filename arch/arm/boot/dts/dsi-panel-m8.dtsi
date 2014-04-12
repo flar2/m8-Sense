@@ -328,7 +328,7 @@
 			39 01 00 00 01 00 02 FF 23 /* Enter CMD2 page3 */
 			39 01 00 00 00 00 02 00 02 /* DMCT = 1, Select the enable / disable mechanism for CABC and Manual dimming functions. */
 			39 01 00 00 00 00 02 01 84 /* Enable CABC dimmin and Gamma Dimming */
-			39 01 00 00 00 00 02 05 22 /* Moving mode dimming 32step, still mode 8step */
+			39 01 00 00 00 00 02 05 24 /* Moving mode dimming 32step, still mode 32step */
 			39 01 00 00 00 00 02 08 04 /* PWMDIV[7:0] for PWM frequency */
 			39 01 00 00 00 00 02 46 00 /* PWM duty count for 42.96kHZ */
 			39 01 00 00 00 00 02 17 FF /* CABC still mode PWM - gray 240-255 */
@@ -423,7 +423,7 @@
 			39 01 00 00 00 00 02 FB 01 /* MTP do not reload CMD2 P2 */
 			39 01 00 00 01 00 02 FF 10 /* Enter CMD1 */
 			39 01 00 00 00 00 02 55 82 /* Enable IE slight level and CABC still mode */
-			39 01 00 00 00 00 02 5E 14 /* Enable CMB function */
+			39 01 00 00 00 00 02 5E 22 /* Enable CMB function limit 13% */
 			39 01 00 00 78 00 02 11 00 /* LCD Sleep out command */
 			39 01 00 00 01 00 02 FF 24 /* Enter CMD24 */
 			39 01 00 00 00 00 02 C6 09 /* Output Hsync to HSOUT */
@@ -1411,7 +1411,7 @@
 			39 01 00 00 01 00 02 FF 23 /* Enter CMD2 page3 */
 			39 01 00 00 00 00 02 00 02 /* DMCT = 1, Select the enable / disable mechanism for CABC and Manual dimming functions. */
 			39 01 00 00 00 00 02 01 84 /* Enable CABC dimmin and Gamma Dimming */
-			39 01 00 00 00 00 02 05 22 /* Moving mode dimming 32step, still mode 8step */
+			39 01 00 00 00 00 02 05 24 /* Moving mode dimming 32step, still mode 32step */
 			39 01 00 00 00 00 02 08 04 /* PWMDIV[7:0] for PWM frequency */
 			39 01 00 00 00 00 02 46 00 /* PWM duty count for 42.96kHZ */
 			39 01 00 00 00 00 02 17 FF /* CABC still mode PWM - gray 240-255 */
@@ -2007,7 +2007,7 @@
 			39 01 00 00 00 00 02 FB 01 /* MTP do not reload CMD2 P4 */
 			39 01 00 00 01 00 02 FF 10 /* Enter CMD1 */
 			39 01 00 00 00 00 02 55 82 /* Enable IE slight level and CABC still mode */
-			39 01 00 00 00 00 02 5E 14 /* Enable CMB function */
+			39 01 00 00 00 00 02 5E 22 /* Enable CMB function limit 13%*/
 			39 01 00 00 78 00 02 11 00 /* LCD Sleep out command */
 			39 01 00 00 00 00 02 35 00 /* Turn on TE (TEE/ TE H/W pin) function */
 			39 01 00 00 00 00 02 29 00 /* LCD Display on */];

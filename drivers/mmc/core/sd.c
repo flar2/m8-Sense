@@ -1045,13 +1045,15 @@ static int mmc_sd_suspend(struct mmc_host *host)
 	BUG_ON(!host);
 	BUG_ON(!host->card);
 
-	mmc_disable_clk_scaling(host);
 
+	mmc_disable_clk_scaling(host);
+	mmc_rpm_hold(host, &host->class_dev);
 	mmc_claim_host(host);
 	if (!mmc_host_is_spi(host))
 		mmc_deselect_cards(host);
 	host->card->state &= ~MMC_STATE_HIGHSPEED;
 	mmc_release_host(host);
+	mmc_rpm_release(host, &host->class_dev);
 
 	return 0;
 }

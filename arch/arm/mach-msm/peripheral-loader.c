@@ -195,11 +195,9 @@ static irqreturn_t proxy_unvote_intr_handler(int irq, void *dev_id)
 	struct pil_priv *priv = desc->priv;
 
     
-    if (board_mfg_mode() == MFG_MODE_POWER_TEST) {
-        if ( strncmp(desc->name, "wcnss",5)==0) {
-            pm_qos_update_request(&wcnss_pm_qos_req, PM_QOS_DEFAULT_VALUE );
-            pil_info(desc, " release wcnss_pm_qos_req \n");
-        }
+    if ( strncmp(desc->name, "wcnss",5)==0) {
+        pm_qos_update_request(&wcnss_pm_qos_req, PM_QOS_DEFAULT_VALUE );
+        pil_info(desc, " release wcnss_pm_qos_req \n");
     }
     
 
@@ -429,11 +427,9 @@ static int pil_init_mmap(struct pil_desc *desc, const struct pil_mdt *mdt)
 		return ret;
 
     
-    if (board_mfg_mode() == MFG_MODE_POWER_TEST) {
-        if ( strncmp(desc->name, "wcnss",5)==0) {
-            pm_qos_update_request(&wcnss_pm_qos_req, 1);
-            pil_info(desc, "request wcnss_pm_qos_req \n");
-        }
+    if ( strncmp(desc->name, "wcnss",5)==0) {
+        pm_qos_update_request(&wcnss_pm_qos_req, 1);
+        pil_info(desc, "request wcnss_pm_qos_req \n");
     }
     
 
@@ -783,9 +779,7 @@ static int __init msm_pil_init(void)
 	if (IS_ERR(ion)) 
 		ion = NULL;
 
-    if (board_mfg_mode() == MFG_MODE_POWER_TEST) {
-        pm_qos_add_request(&wcnss_pm_qos_req, PM_QOS_CPU_DMA_LATENCY, PM_QOS_DEFAULT_VALUE);
-    }
+    pm_qos_add_request(&wcnss_pm_qos_req, PM_QOS_CPU_DMA_LATENCY, PM_QOS_DEFAULT_VALUE);
 	return register_pm_notifier(&pil_pm_notifier);
 }
 device_initcall(msm_pil_init);
@@ -795,9 +789,7 @@ static void __exit msm_pil_exit(void)
 	unregister_pm_notifier(&pil_pm_notifier);
 	if (ion)
 		ion_client_destroy(ion);
-    if (board_mfg_mode() == MFG_MODE_POWER_TEST) {
-        pm_qos_remove_request(&wcnss_pm_qos_req);
-    }
+    pm_qos_remove_request(&wcnss_pm_qos_req);
 }
 module_exit(msm_pil_exit);
 

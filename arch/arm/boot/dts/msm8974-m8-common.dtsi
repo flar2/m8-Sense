@@ -574,8 +574,9 @@
 	qcom,stored-batt-cc-uah= <(-1)>;
 	qcom,stored-batt-update-time= <(-1)>;
 	qcom,store-batt-data-soc-thre = <100>;
-	qcom,criteria-sw-est-ocv = <86400000>;
+	qcom,criteria-sw-est-ocv = <79200000>;
 	qcom,rconn-mohm-sw-est-ocv = <10>;
+	qcom,enable-batt-full-fake-ocv = <1>;
 	status = "ok";
 };
 

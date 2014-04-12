@@ -30,7 +30,6 @@
 #define pr_info(fmt, ...) pr_aud_info(fmt, ##__VA_ARGS__)
 #define pr_err(fmt, ...) pr_aud_err(fmt, ##__VA_ARGS__)
 
-
 #define TIMEOUT_MS 1000
 
 #define RESET_COPP_ID 99
@@ -39,6 +38,11 @@
 
 #define ULL_SUPPORTED_SAMPLE_RATE 48000
 #define ULL_MAX_SUPPORTED_CHANNEL 2
+
+#ifdef CONFIG_HD_AUDIO
+#define ULL_SUPPORTED_BITS_PER_SAMPLE 16
+#endif
+
 enum {
 	ADM_RX_AUDPROC_CAL,
 	ADM_TX_AUDPROC_CAL,
@@ -1135,8 +1139,10 @@ int adm_open(int port_id, int path, int rate, int channel_mode, int topology,
 	int index;
 	int tmp_port = q6audio_get_port_id(port_id);
 
-	pr_info("%s: port %#x path:%d rate:%d mode:%d perf_mode:%d\n",
-		 __func__, port_id, path, rate, channel_mode, perf_mode);
+	pr_info("%s: port %#x path:%d rate:%d mode:%d perf_mode:%d,\
+			topology: %d, bits_per_sample: %d\n", __func__,
+			port_id, path, rate, channel_mode, perf_mode,
+			topology, bits_per_sample);
 
 	port_id = q6audio_convert_virtual_to_portid(port_id);
 
@@ -1212,6 +1218,9 @@ int adm_open(int port_id, int path, int rate, int channel_mode, int topology,
 			rate = ULL_SUPPORTED_SAMPLE_RATE;
 			if(channel_mode > ULL_MAX_SUPPORTED_CHANNEL)
 				channel_mode = ULL_MAX_SUPPORTED_CHANNEL;
+#ifdef CONFIG_HD_AUDIO
+			bits_per_sample = ULL_SUPPORTED_BITS_PER_SAMPLE;
+#endif
 		}
 		open.dev_num_channel = channel_mode & 0x00FF;
 		open.bit_width = bits_per_sample;
