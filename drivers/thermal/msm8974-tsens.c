@@ -631,7 +631,7 @@ static void monitor_tsens_status(struct work_struct *work)
 		enable = cntl & (0x1 << i);
 		if(enable > 0) {
 			msm_tsens_get_temp(i, &temp);
-			printk("[THERMAL] Sensor %d = %lu C\n", i, temp);
+			//printk("[THERMAL] Sensor %d = %lu C\n", i, temp);
 		}
 	}
 	if (monitor_tsense_wq) {

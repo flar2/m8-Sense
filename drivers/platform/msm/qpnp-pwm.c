@@ -1805,7 +1805,7 @@ static void qpnp_led_set(struct led_classdev *led_cdev,
 	}
 
 	led = container_of(led_cdev, struct qpnp_led_data, cdev);
-	LED_INFO("%s id: %d value %d status: %d\n", __func__, led->id, value, led->status);
+	//LED_INFO("%s id: %d value %d status: %d\n", __func__, led->id, value, led->status);
 	mutex_lock(&led->lock);
 	if(value && !led->status) {
 		val = 0x10;

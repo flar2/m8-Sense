@@ -522,7 +522,7 @@ static int i2c_syn_error_handler(struct synaptics_ts_data *ts, uint8_t reset, ch
 			gpio_direction_output(ts->gpio_reset, 0);
 			msleep(1);
 			gpio_direction_output(ts->gpio_reset, 1);
-			pr_info("[TP] %s: synaptics touch chip reseted.\n", __func__);
+			//pr_info("[TP] %s: synaptics touch chip reseted.\n", __func__);
 		}
 
 		if (!ts->use_irq) {
@@ -555,7 +555,7 @@ static int i2c_syn_reset_handler(struct synaptics_ts_data *ts, uint8_t reset, ch
 			gpio_direction_output(ts->gpio_reset, 0);
 			msleep(1);
 			gpio_direction_output(ts->gpio_reset, 1);
-			pr_info("[TP] %s: synaptics touch chip reseted.\n", __func__);
+			//pr_info("[TP] %s: synaptics touch chip reseted.\n", __func__);
 		}
 
 		if (!ts->use_irq) {
@@ -1677,7 +1677,7 @@ static ssize_t syn_reset(struct device *dev,
 		gpio_direction_output(ts->gpio_reset, 0);
 		msleep(1);
 		gpio_direction_output(ts->gpio_reset, 1);
-		pr_info("[TP] %s: synaptics touch chip reseted.\n", __func__);
+		//pr_info("[TP] %s: synaptics touch chip reseted.\n", __func__);
 	}
 
 	return count;
@@ -2213,11 +2213,11 @@ static void synaptics_ts_finger_func(struct synaptics_ts_data *ts)
 					if (ts->layout[1] < finger_data[i][0])
 						finger_data[i][0] = ts->layout[1];
 					if (ts->width_factor && ts->height_factor) {
-						pr_info("[TP] Screen:F[%02d]:Up, X=%d, Y=%d, W=%d, Z=%d, IM:%d, CIDIM:%d, Freq:%d, NS:%d\n",
+						/*pr_info("[TP] Screen:F[%02d]:Up, X=%d, Y=%d, W=%d, Z=%d, IM:%d, CIDIM:%d, Freq:%d, NS:%d\n",
 							i+1, (x_pos[i]*ts->width_factor)>>SHIFT_BITS,
 							(y_pos[i]*ts->height_factor)>>SHIFT_BITS,
 							finger_data[i][2], finger_data[i][3],
-							temp_im, temp_cidim, noise_index[9], noise_index[4]);
+							temp_im, temp_cidim, noise_index[9], noise_index[4]);*/
 					} else {
 						pr_info("[TP] Raw:F[%02d]:Up, X=%d, Y=%d, W=%d, Z=%d, IM:%d, CIDIM:%d, Freq:%d, NS:%d\n",
 							i+1, x_pos[i], y_pos[i],
@@ -2429,11 +2429,11 @@ static void synaptics_ts_finger_func(struct synaptics_ts_data *ts)
 
 						if ((finger_press_changed & BIT(i)) && ts->debug_log_level & BIT(3)) {
 							if(ts->width_factor && ts->height_factor){
-								pr_info("[TP] Screen:F[%02d]:Down, X=%d, Y=%d, W=%d, Z=%d, IM:%d, CIDIM:%d, Freq:%d, NS:%d\n",
+								/*pr_info("[TP] Screen:F[%02d]:Down, X=%d, Y=%d, W=%d, Z=%d, IM:%d, CIDIM:%d, Freq:%d, NS:%d\n",
 									i+1, (finger_data[i][0]*ts->width_factor)>>SHIFT_BITS,
 									(finger_data[i][1]*ts->height_factor)>>SHIFT_BITS,
 									finger_data[i][2], finger_data[i][3],
-									temp_im, temp_cidim, noise_index[9], noise_index[4]);
+									temp_im, temp_cidim, noise_index[9], noise_index[4]);*/
 							} else {
 								pr_info("[TP] Raw:F[%02d]:Down, X=%d, Y=%d, W=%d, Z=%d, IM:%d, CIDIM:%d, Freq:%d, NS:%d\n",
 									i+1, finger_data[i][0], finger_data[i][1],
@@ -2648,12 +2648,12 @@ static void synaptics_ts_status_func(struct synaptics_ts_data *ts)
 		i2c_syn_error_handler(ts, ts->i2c_err_handler_en, "r", __func__);
 	} else {
 		data &= 0x0F;
-		pr_info("[TP] Device Status = %x\n", data);
+		//pr_info("[TP] Device Status = %x\n", data);
 		if (data == 1) {
 			mutex_lock(&syn_mutex);
 			ts->page_select = 0;
 			mutex_unlock(&syn_mutex);
-			pr_info("[TP] TOUCH: Page Select: %s: %d\n", __func__, ts->page_select);
+			//pr_info("[TP] TOUCH: Page Select: %s: %d\n", __func__, ts->page_select);
 			ret = synaptics_init_panel(ts);
 			if (ret < 0)
 				pr_info("[TP]%s: synaptics_init_panel fail\n", __func__);
@@ -4285,7 +4285,7 @@ static int fb_notifier_callback(struct notifier_block *self,
 	struct synaptics_ts_data *ts=
 		container_of(self, struct synaptics_ts_data, fb_notif);
 
-	pr_info("[TP] %s\n", __func__);
+	//pr_info("[TP] %s\n", __func__);
 	if (evdata && evdata->data && event == FB_EVENT_BLANK && ts &&
 			ts->client) {
 		blank = evdata->data;
@@ -4298,7 +4298,7 @@ static int fb_notifier_callback(struct notifier_block *self,
 			{
 				gpio_direction_output(ts->gpio_i2c, 0);
 				ts->i2c_to_mcu = 0;
-				printk("[TP][SensorHub] Switch touch i2c to CPU\n");
+				//printk("[TP][SensorHub] Switch touch i2c to CPU\n");
 				i2c_syn_reset_handler(ts, ts->i2c_err_handler_en, "resume from MCU", __func__); 
 			}
 #endif
@@ -4318,7 +4318,7 @@ static int fb_notifier_callback(struct notifier_block *self,
 			{
 				gpio_direction_output(ts->gpio_i2c, 1);
 				ts->i2c_to_mcu = 1;
-				printk("[TP][SensorHub] Switch touch i2c to MCU\n");
+				//printk("[TP][SensorHub] Switch touch i2c to MCU\n");
 			}
 			touch_status(1);
 #endif

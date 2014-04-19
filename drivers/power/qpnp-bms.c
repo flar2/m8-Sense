@@ -2140,10 +2140,10 @@ static int report_cc_based_soc(struct qpnp_bms_chip *chip)
 	if (chip->last_soc != soc && !chip->last_soc_unbound)
 		chip->last_soc_change_sec = last_change_sec;
 
-	pr_info("last_soc = %d, calculated_soc = %d, soc = %d, time since last change = %d,"
+	/*pr_info("last_soc = %d, calculated_soc = %d, soc = %d, time since last change = %d,"
 			"ori_soc_change = %d, soc_change = %d\n",
 			chip->last_soc, chip->calculated_soc,
-			soc, time_since_last_change_sec, bms_dbg.ori_soc_change, soc_change);
+			soc, time_since_last_change_sec, bms_dbg.ori_soc_change, soc_change);*/
 
 	chip->last_soc = bound_soc(soc);
 	backup_soc_and_iavg(chip, batt_temp, chip->last_soc);
@@ -2666,7 +2666,7 @@ done_calculating:
 	} else {
 		report_state_of_charge(chip);
 	}
-	pr_info("FCC=%d,UC=%d,RC=%d,CC_uAh/ori=%d/%d,RUC=%d,SOC=%d,raw_soc=%d,"
+	/*pr_info("FCC=%d,UC=%d,RC=%d,CC_uAh/ori=%d/%d,RUC=%d,SOC=%d,raw_soc=%d,"
 		       "start_pc=%d,end_pc=%d,OCV_uV/ori=%d/%d,OCV_raw=%x,"
 		       "rbatt=%d,rbatt_sf=%d,batt_temp=%d,soc_rbatt=%d,"
 		       "ori_uuc_uah=%d,uuc_rbatt=%d,uuc_iavg_ma=%d,"
@@ -2686,7 +2686,7 @@ done_calculating:
 			bms_dbg.shutdown_soc, bms_dbg.time_last_change_s, bms_dbg.adjusted_soc,
 			chip->calculated_soc, raw->cc, raw->shdw_cc, chip->ocv_reading_at_100,
 			chip->cc_backup_uah, chip->ocv_backup_uv, consistent_flag, is_ocv_update_start,
-			htc_batt_bms_timer.no_ocv_update_period_ms);
+			htc_batt_bms_timer.no_ocv_update_period_ms);*/
 
 	get_current_time(&chip->last_recalc_time);
 	chip->first_time_calc_soc = 0;
@@ -3852,7 +3852,7 @@ static int dump_all(void)
 	if(BATT_LOG_BUF_LEN - len <= 1)
 		pr_warn("batt log length maybe out of buffer range!!!");
 
-	pr_info("%s\n", batt_log_buf);
+	//pr_info("%s\n", batt_log_buf);
 	return 0;
 }
 

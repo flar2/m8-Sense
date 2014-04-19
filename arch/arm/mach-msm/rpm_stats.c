@@ -284,9 +284,9 @@ void msm_rpm_dump_stat(void)
 			if (data_v3.is_sleep_mode)
 				data_v3.total_duration += (arch_counter_get_cntpct() - data_v3.sleep_timestamp);
 
-			pr_info("[K] sleep_info_m.%d - %u (%d), %llums\n", i, data_v3.count,
+			/*pr_info("[K] sleep_info_m.%d - %u (%d), %llums\n", i, data_v3.count,
 									data_v3.is_sleep_mode,
-									get_time_in_msec(data_v3.total_duration));
+									get_time_in_msec(data_v3.total_duration));*/
 		}
 	}
 }
