@@ -97,7 +97,7 @@ module_param(DEBUG_FLAG_GEOMAGNETIC_ROTATION_VECTOR, int, 0600);
 static int DEBUG_FLAG_TIME = 10;
 module_param(DEBUG_FLAG_TIME, int, 0600);
 
-static struct vib_trigger *vib_trigger = NULL;
+struct vib_trigger *vib_trigger = NULL;
 
 static void polling_do_work(struct work_struct *w);
 static DECLARE_DELAYED_WORK(polling_work, polling_do_work);
@@ -888,6 +888,68 @@ static int get_proximity(struct device *dev, struct device_attribute *attr, char
 	return snprintf(buf, PAGE_SIZE, "%x %x \n",data[0],data[1]);
 }
 
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_WAKE_GESTURES
+void proximity_set(int enabled)
+{
+	int sensors_id = 4;
+	u8 data;
+	u8 i;
+	int retry = 0;
+	int rc = 0;
+	u8 data8[8] = {0};
+
+	for (retry = 0; retry < ACTIVE_RETRY_TIMES; retry++) {
+		if (mcu_data->resume_done != 1)
+			I("%s: resume not completed, retry = %d\n", __func__, retry);
+		else
+			break;
+	}
+	if (retry >= ACTIVE_RETRY_TIMES) {
+		I("%s: resume not completed, retry = %d, retry fails!\n", __func__, retry);
+		return;
+	}
+
+	if (probe_i2c_fail) {
+		I("%s++: probe_i2c_fail retrun 0\n", __func__);
+		return;
+	}
+
+	if (enabled == 0) {
+		rc = CWMCU_i2c_read(mcu_data, CW_I2C_REG_SENSORS_CALIBRATOR_DEBUG_PROXIMITY, data8, 8);
+		I("%s: AUtoK: Threshold = %d, SADC = %d, CompensationValue = %d\n", __func__, data8[5], data8[4], data8[6]);
+		I("%s: AutoK: QueueIsEmpty = %d, Queue = %d %d %d %d\n", __func__, data8[7], data8[0], data8[1], data8[2], data8[3]);
+	}
+
+	if (enabled == 1) {
+		mcu_data->filter_first_zeros[sensors_id] = 1;
+	}
+
+	mcu_data->enabled_list &= ~(1<<sensors_id);
+	mcu_data->enabled_list |= ((uint32_t)enabled)<<sensors_id;
+
+	i = sensors_id /8;
+	data = (u8)(mcu_data->enabled_list>>(i*8));
+
+	D("%s: i= %d data = %d CWSTM32_ENABLE_REG= %d \n", __func__, i, data, CWSTM32_ENABLE_REG+i);
+
+	CWMCU_i2c_write(mcu_data, CWSTM32_ENABLE_REG+i, &data,1);
+
+	if ((mcu_data->input != NULL) && (sensors_id == Proximity) && (enabled == 1)) {
+		input_report_abs(mcu_data->input, ABS_DISTANCE, -1);
+		D("%s: Report dummy -1 proximity event\n", __func__);
+	}
+}
+
+int pocket_detection_check(void)
+{
+	u8 data2[2]={0};
+
+	CWMCU_i2c_read(mcu_data, CWSTM32_READ_Proximity, data2, 2);
+	D("%s: %x %x \n",  __func__, data2[0], data2[1]);
+	return data2[0];
+}
+#endif
+
 static int get_proximity_polling(struct device *dev, struct device_attribute *attr, char *buf){
 	u8 data[2]={0};
 	u8 data_polling_enable = 0;
@@ -1414,12 +1476,21 @@ static struct attribute_group sysfs_attribute_group = {
 	.attrs = sysfs_attributes
 };
 #endif
+
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_WAKE_GESTURES
+extern void sweep2wake_setdev(struct input_dev * input_device);
+#endif
+
 static void __devinit CWMCU_init_input_device(struct CWMCU_data *sensor,struct input_dev *idev)	
 {
 	idev->name = CWMCU_I2C_NAME;
 	
 	idev->id.bustype = BUS_I2C;
 	idev->dev.parent = &sensor->client->dev;
+
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_WAKE_GESTURES
+	sweep2wake_setdev(idev);
+#endif
 
 	idev->evbit[0] = BIT_MASK(EV_ABS);
 	set_bit(EV_ABS, idev->evbit);
