@@ -265,8 +265,10 @@ extern unsigned int get_tamper_sf(void);
 #define DT2W_DELTA 230
 #define S2W_PWRKEY_DUR 60
 #define GEST_TIMEOUT 70
-#define WAKE_GESTURE 0x0b
-#define WAKE_GESTURE2 0x07
+#define WAKE_MOTION 0x07
+#define WAKE_MOTION_HIDI 0x0b
+#define WAKE_MATRIX 0x0a
+#define WAKE_MATRIX_HIDI 0x0c
 
 static cputime64_t prev_time;
 static int dt_prev_x = 0, dt_prev_y = 0;
@@ -300,6 +302,8 @@ void sweep2wake_setdev(struct input_dev *input_device)
 
 static void report_gesture(int gest)
 {
+	struct synaptics_ts_data *ts = gl_ts;
+
 	if (pocket_detect && !check_pocket)
 		return;
 
@@ -310,8 +314,13 @@ static void report_gesture(int gest)
 		return;
 
 	vib_trigger_event(vib_trigger, vib_strength);
-	input_report_rel(gesture_dev, WAKE_GESTURE, gest);
-	input_report_rel(gesture_dev, WAKE_GESTURE2, gest);
+	if (ts->cover_enable) {
+		input_report_rel(gesture_dev, WAKE_MATRIX_HIDI, gest);
+		input_report_rel(gesture_dev, WAKE_MATRIX, gest);
+	} else {
+		input_report_rel(gesture_dev, WAKE_MOTION_HIDI, gest);
+		input_report_rel(gesture_dev, WAKE_MOTION, gest);
+	}
 	input_sync(gesture_dev);
 }
 
