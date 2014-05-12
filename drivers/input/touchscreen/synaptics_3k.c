@@ -283,14 +283,15 @@ static bool s2w_switch_changed = false;
 static int s2s_switch = 0;
 static int dt2w_switch = 0, dt2w_switch_temp = 0;
 static bool dt2w_switch_changed = false;
-static int gestures_switch = 1, gestures_switch_temp = 1;
+static int gestures_switch = 0, gestures_switch_temp = 1;
 static bool gestures_switch_changed = false;
 static int pocket_detect = 0;
 static int vib_strength = 20;
+static int boot_mode = 1;
 
 static struct wake_lock wg_wakelock;
 extern void proximity_set(int enabled);
-extern int check_pocket;
+extern int check_pocket(void);
 extern struct vib_trigger *vib_trigger;
 static struct input_dev *gesture_dev;
 
@@ -304,7 +305,7 @@ static void report_gesture(int gest)
 {
 	struct synaptics_ts_data *ts = gl_ts;
 
-	if (pocket_detect && !check_pocket)
+	if (!ts->cover_enable && pocket_detect && !check_pocket())
 		return;
 
         pwrtrigger_time[1] = pwrtrigger_time[0];
@@ -350,7 +351,7 @@ static void sweep2wake_pwrtrigger(int wake)
 	if (pwrtrigger_time[0] - pwrtrigger_time[1] < GEST_TIMEOUT)
 		return;
 
-	if (pocket_detect && wake && !check_pocket)
+	if (pocket_detect && wake && !check_pocket())
 		return;
 
 	vib_trigger_event(vib_trigger, vib_strength);
@@ -4620,6 +4621,7 @@ static int synaptics_ts_suspend(struct i2c_client *client)
 
 	if (pocket_detect && !phone_call_stat && (s2w_switch || dt2w_switch || gestures_switch))
 		proximity_set(1);
+
 	scr_suspended = true;
 #endif
 	return 0;
@@ -4725,6 +4727,7 @@ static int synaptics_ts_resume(struct i2c_client *client)
 
 	if (pocket_detect && !phone_call_stat && (s2w_switch || dt2w_switch || gestures_switch))
 		proximity_set(0);
+
 	scr_suspended = false;
 #endif 
 	return 0;
@@ -4747,8 +4750,9 @@ static int fb_notifier_callback(struct notifier_block *self,
 		case FB_BLANK_UNBLANK:
 #if defined(CONFIG_SYNC_TOUCH_STATUS)
 #ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_WAKE_GESTURES
-			if (!s2w_switch && !dt2w_switch && !gestures_switch) {
+			if (boot_mode || (!s2w_switch && !dt2w_switch && !gestures_switch)) {
 #endif
+				boot_mode = 0;
 				touch_status(0);
 				if(gpio_is_valid(ts->gpio_i2c))
 				{
@@ -4775,7 +4779,7 @@ static int fb_notifier_callback(struct notifier_block *self,
 			synaptics_ts_suspend(ts->client);
 #if defined(CONFIG_SYNC_TOUCH_STATUS)
 #ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_WAKE_GESTURES
-			if (!s2w_switch && !dt2w_switch && !gestures_switch) {
+			if (boot_mode || (!s2w_switch && !dt2w_switch && !gestures_switch)) {
 #endif
 				if(gpio_is_valid(ts->gpio_i2c))
 				{

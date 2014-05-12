@@ -889,13 +889,10 @@ static int get_proximity(struct device *dev, struct device_attribute *attr, char
 }
 
 #ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_WAKE_GESTURES
-int check_pocket = 1;
-
-void proximity_set(int enabled)
+static void sensor_enable(int sensors_id, int enabled)
 {
-	int sensors_id = 4;
-	u8 data;
 	u8 i;
+	u8 data;
 	int retry = 0;
 
 	for (retry = 0; retry < ACTIVE_RETRY_TIMES; retry++) {
@@ -932,6 +929,29 @@ void proximity_set(int enabled)
 		input_report_abs(mcu_data->input, ABS_DISTANCE, -1);
 	}
 }
+
+void proximity_set(int enabled)
+{
+//	if (enabled) {
+//		sensor_enable(Gesture_Motion_HIDI, 0);
+//		sensor_enable(Gesture_Motion, 0);
+//	}
+	
+	sensor_enable(Proximity, enabled);
+}
+
+int check_pocket(void)
+{
+	u8 data[10]={0};
+	int ret;
+
+	CWMCU_i2c_read(mcu_data, CWSTM32_READ_Proximity, data, 2);
+	ret = data[0];
+
+	return ret;
+}
+
+
 #endif
 
 static int get_proximity_polling(struct device *dev, struct device_attribute *attr, char *buf){
@@ -2501,9 +2521,6 @@ static void cwmcu_irq_work_func(struct work_struct *work)
 			ret = CWMCU_i2c_read(sensor, CWSTM32_READ_Proximity, data, 2);
 			if(data[0] < 2){
 				sensor->sensors_time[Proximity] = sensor->sensors_time[Proximity] -sensor->report_period[Proximity];
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_WAKE_GESTURES
-				check_pocket = data[0];
-#endif
 				input_report_abs(sensor->input, ABS_DISTANCE, data[0]);
 				input_sync(sensor->input);
 				D("Proximity interrupt occur value is %d adc is %x ps_calibration is %d\n",data[0],data[1],sensor->ps_calibrated);
