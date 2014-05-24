@@ -463,6 +463,10 @@ static ssize_t htc_battery_set_phone_call(struct device *dev,
 
 #ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_WAKE_GESTURES
 	phone_call_stat = phone_call;
+	if (phone_call_stat)
+		printk("[WG] in phone call\n");
+	else
+		printk("[WG] phone call end\n");
 #endif
 
 	return count;

@@ -895,7 +895,8 @@ static void sensor_enable(int sensors_id, int enabled)
 {
 	u8 i;
 	u8 data;
-	int retry = 0;
+	u8 data8[8] = {0};
+	int retry = 0, rc = 0;
 
 	for (retry = 0; retry < ACTIVE_RETRY_TIMES; retry++) {
 		if (mcu_data->resume_done != 1)
@@ -912,6 +913,13 @@ static void sensor_enable(int sensors_id, int enabled)
 		I("%s++: probe_i2c_fail retrun 0\n", __func__);
 		return;
 	}
+
+	if ((sensors_id == Proximity) && (enabled == 0)) {
+		rc = CWMCU_i2c_read(mcu_data, CW_I2C_REG_SENSORS_CALIBRATOR_DEBUG_PROXIMITY, data8, 8);
+		I("%s: AUtoK: Threshold = %d, SADC = %d, CompensationValue = %d\n", __func__, data8[5], data8[4], data8[6]);
+		I("%s: AutoK: QueueIsEmpty = %d, Queue = %d %d %d %d\n", __func__, data8[7], data8[0], data8[1], data8[2], data8[3]);
+	}
+
 
 	if (enabled == 1) {
 		mcu_data->filter_first_zeros[sensors_id] = 1;
@@ -935,6 +943,10 @@ static void sensor_enable(int sensors_id, int enabled)
 void proximity_set(int enabled)
 {
 	sensor_enable(Proximity, enabled);
+	if (enabled)
+		I("[WG] proximity sensor enabled\n");
+	else
+		I("[WG] proximity sensor disabled\n");
 }
 
 void camera_volume_button_disable(void)
@@ -949,6 +961,7 @@ int check_pocket(void)
 	int ret;
 
 	CWMCU_i2c_read(mcu_data, CWSTM32_READ_Proximity, data, 2);
+	I("[WG] check pocket: data0=%d data1=%d\n", data[0], data[1]);
 	ret = data[0];
 
 	return ret;
