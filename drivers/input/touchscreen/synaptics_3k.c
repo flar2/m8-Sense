@@ -240,6 +240,8 @@ static void synaptics_ts_late_resume(struct early_suspend *h);
 static DECLARE_WAIT_QUEUE_HEAD(syn_data_ready_wq);
 static DEFINE_MUTEX(syn_mutex);
 
+static int synaptics_ts_suspend(struct i2c_client *client);
+
 static struct synaptics_ts_data *gl_ts;
 static uint16_t syn_panel_version;
 static uint8_t vk_press;
@@ -268,8 +270,6 @@ extern unsigned int get_tamper_sf(void);
 #define BOOT_MODE_TIMEOUT 10000
 #define WAKE_MOTION 0x07
 #define WAKE_MOTION_HIDI 0x0b
-#define WAKE_MATRIX 0x0a
-#define WAKE_MATRIX_HIDI 0x0c
 
 static cputime64_t prev_time;
 static int dt_prev_x = 0, dt_prev_y = 0;
@@ -292,6 +292,7 @@ static int vib_strength = 20;
 int cam_switch = 1;
 static int boot_mode = 1;
 static unsigned long boot_mode_init;
+static bool cover_enable_ind = false;
 
 static struct wake_lock wg_wakelock;
 extern void camera_volume_button_disable(void);
@@ -308,8 +309,6 @@ void sweep2wake_setdev(struct input_dev *input_device)
 
 static void report_gesture(int gest)
 {
-	struct synaptics_ts_data *ts = gl_ts;
-
 	if (pocket_detect && !check_pocket()) {
 		pr_info("[WG] in pocket\n");
 		return;
@@ -322,13 +321,8 @@ static void report_gesture(int gest)
 		return;
 
 	vib_trigger_event(vib_trigger, vib_strength);
-	if (ts->cover_enable) {
-		input_report_rel(gesture_dev, WAKE_MATRIX_HIDI, gest);
-		input_report_rel(gesture_dev, WAKE_MATRIX, gest);
-	} else {
-		input_report_rel(gesture_dev, WAKE_MOTION_HIDI, gest);
-		input_report_rel(gesture_dev, WAKE_MOTION, gest);
-	}
+	input_report_rel(gesture_dev, WAKE_MOTION_HIDI, gest);
+	input_report_rel(gesture_dev, WAKE_MOTION, gest);
 	input_sync(gesture_dev);
 }
 
@@ -3276,16 +3270,33 @@ static int hallsensor_hover_status_handler_func(struct notifier_block *this,
 	pr_info("[TP][HL] %s[%s]", pole? "att_s" : "att_n", pole_value ? "Near" : "Far");
 
 	if (pole == 1 && ts->package_id == 3528 && ts->cover_setting[0]) {
-		if (pole_value == 0)
+		if (pole_value == 0) {
 			ts->cover_enable = 0;
-		else
+			
+		} else {
 			ts->cover_enable = 1;
-
+		}
 		if (!ts->i2c_to_mcu) {
 			ret = syn_set_cover_func(ts, ts->cover_enable);
 			if (ret < 0)
 				return ret;
 		}
+
+		if (scr_suspended && ts->cover_enable && !cover_enable_ind && (gestures_switch || dt2w_switch || s2w_switch)) {
+			if (unlikely(boot_mode))
+				return NOTIFY_OK;
+			cover_enable_ind = true;
+			dt2w_reset_handler();
+			disable_irq_wake(ts->client->irq);
+			synaptics_ts_suspend(ts->client);
+			if(gpio_is_valid(ts->gpio_i2c)) {
+				gpio_direction_output(ts->gpio_i2c, 1);
+				ts->i2c_to_mcu = 1;
+				printk("[TP][SensorHub] Switch touch i2c to MCU (from cover)\n");
+			}
+			touch_status(1);
+		}
+
 		pr_info("[TP] %s: cover_enable = %d.\n", __func__, ts->cover_enable);
 	}
 
@@ -4509,16 +4520,16 @@ static int synaptics_ts_suspend(struct i2c_client *client)
 	uint16_t reg = 0;
 	struct synaptics_ts_data *ts = i2c_get_clientdata(client);
 	pr_info("[TP] %s: enter\n", __func__);
-
+	pr_info("[TP] cover enable: %d\n", cover_enable_ind);
 #ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_WAKE_GESTURES
-	if (!boot_mode && (s2w_switch || dt2w_switch || gestures_switch)) {
+	if (!boot_mode && !cover_enable_ind && (s2w_switch || dt2w_switch || gestures_switch)) {
 		enable_irq_wake(client->irq);
 	}
 #endif
 	
 	if (ts->use_irq) {
 #ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_WAKE_GESTURES
-		if (boot_mode || (!s2w_switch && !dt2w_switch && !gestures_switch)) {
+		if (boot_mode || cover_enable_ind || (!s2w_switch && !dt2w_switch && !gestures_switch)) {
 #endif
 			disable_irq(client->irq);
 			ts->irq_enabled = 0;
@@ -4529,7 +4540,7 @@ static int synaptics_ts_suspend(struct i2c_client *client)
 		hrtimer_cancel(&ts->timer);
 		ret = cancel_work_sync(&ts->work);
 #ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_WAKE_GESTURES
-		if (!s2w_switch && !dt2w_switch && !gestures_switch) {
+		if (cover_enable_ind || (!s2w_switch && !dt2w_switch && !gestures_switch)) {
 #endif
 			if (ret && ts->use_irq) /* if work was pending disable-count is now 2 */
 				enable_irq(client->irq);
@@ -4627,7 +4638,7 @@ static int synaptics_ts_suspend(struct i2c_client *client)
 
 	}
 #ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_WAKE_GESTURES
-	if (boot_mode || (!s2w_switch && !dt2w_switch && !gestures_switch)) {
+	if (boot_mode || cover_enable_ind || (!s2w_switch && !dt2w_switch && !gestures_switch)) {
 #endif
 		if (ts->power)
 			ts->power(0);
@@ -4657,7 +4668,7 @@ static int synaptics_ts_suspend(struct i2c_client *client)
 #ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_WAKE_GESTURES
 	}
 
-	if (!boot_mode && (s2w_switch || dt2w_switch || gestures_switch)) {
+	if (!boot_mode && !cover_enable_ind && (s2w_switch || dt2w_switch || gestures_switch)) {
 		if (pocket_detect && !phone_call_stat && !boot_mode)
 			proximity_set(1);
 		if (!cam_switch)
@@ -4674,13 +4685,13 @@ static int synaptics_ts_resume(struct i2c_client *client)
 	int ret, i;
 	struct synaptics_ts_data *ts = i2c_get_clientdata(client);
 	pr_info("[TP] %s: enter\n", __func__);
-
+	pr_info("[TP] cover enable: %d\n", cover_enable_ind);
 #ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_WAKE_GESTURES
-	if (!boot_mode && (s2w_switch || dt2w_switch || gestures_switch)) {
+	if (!boot_mode && !cover_enable_ind && (s2w_switch || dt2w_switch || gestures_switch)) {
 		disable_irq_wake(client->irq);
 	}
 
-	if (boot_mode || (!s2w_switch && !dt2w_switch && !gestures_switch)) {
+	if (boot_mode || cover_enable_ind || (!s2w_switch && !dt2w_switch && !gestures_switch)) {
 #endif 
 		if (ts->power) {
 			ts->power(1);
@@ -4741,7 +4752,7 @@ static int synaptics_ts_resume(struct i2c_client *client)
 	}
 
 #ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_WAKE_GESTURES
-	if (boot_mode || (!s2w_switch && !dt2w_switch && !gestures_switch)) {
+	if (boot_mode || cover_enable_ind || (!s2w_switch && !dt2w_switch && !gestures_switch)) {
 #endif
 		if (ts->use_irq) {
         		enable_irq(client->irq);
@@ -4796,8 +4807,7 @@ static int fb_notifier_callback(struct notifier_block *self,
 		case FB_BLANK_UNBLANK:
 #if defined(CONFIG_SYNC_TOUCH_STATUS)
 #ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_WAKE_GESTURES
-			printk("jiffies=%lu\n", jiffies);
-			if (boot_mode || (!s2w_switch && !dt2w_switch && !gestures_switch)) {
+			if (boot_mode || cover_enable_ind || (!s2w_switch && !dt2w_switch && !gestures_switch)) {
 #endif
 				touch_status(0);
 				if(gpio_is_valid(ts->gpio_i2c))
@@ -4812,6 +4822,10 @@ static int fb_notifier_callback(struct notifier_block *self,
 #endif
 #endif
 			synaptics_ts_resume(ts->client);
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_WAKE_GESTURES
+			if (!ts->cover_enable)
+				cover_enable_ind = false;
+#endif
 			break;
 		case FB_BLANK_POWERDOWN:
 		case FB_BLANK_HSYNC_SUSPEND:
@@ -4821,11 +4835,13 @@ static int fb_notifier_callback(struct notifier_block *self,
 #endif
 #ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_WAKE_GESTURES
 			dt2w_reset_handler();
+			if (ts->cover_enable)
+				cover_enable_ind = true;
 #endif
 			synaptics_ts_suspend(ts->client);
 #if defined(CONFIG_SYNC_TOUCH_STATUS)
 #ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_WAKE_GESTURES
-			if (boot_mode || (!s2w_switch && !dt2w_switch && !gestures_switch)) {
+			if (boot_mode || cover_enable_ind || (!s2w_switch && !dt2w_switch && !gestures_switch)) {
 #endif
 				if(gpio_is_valid(ts->gpio_i2c))
 				{
