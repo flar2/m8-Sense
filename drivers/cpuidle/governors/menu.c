@@ -131,49 +131,32 @@ static enum hrtimer_restart menu_hrtimer_notify(struct hrtimer *hrtimer)
 	return HRTIMER_NORESTART;
 }
 
-static u32 get_typical_interval(struct menu_device *data)
+static int detect_repeating_patterns(struct menu_device *data)
 {
-	int i = 0, divisor = 0;
-	uint64_t max = 0, avg = 0, stddev = 0;
-	int64_t thresh = LLONG_MAX; /* Discard outliers above this value. */
-	unsigned int ret = 0; 
+	int i;
+	uint64_t avg = 0;
+	uint64_t stddev = 0; 
+	int ret = 0;
+
 	
-again: 
+	for (i = 0; i < INTERVALS; i++)
+		avg += data->intervals[i];
+	avg = avg / INTERVALS;
 
-	/* first calculate average and standard deviation of the past */
-	max = avg = divisor = stddev = 0;
-	for (i = 0; i < INTERVALS; i++) {
-		int64_t value = data->intervals[i];
-		if (value <= thresh) {
-			avg += value;
-			divisor++;
-			if (value > max)
-				max = value;
-		}
-	}
-	do_div(avg, divisor);
+	
+	if (avg > data->expected_us)
+		return 0;
 
-	for (i = 0; i < INTERVALS; i++) {
-		int64_t value = data->intervals[i];
-		if (value <= thresh) {
-			int64_t diff = value - avg;
-			stddev += diff * diff;
- 		}
-	}
-	do_div(stddev, divisor);
-	stddev = int_sqrt(stddev); 
+	for (i = 0; i < INTERVALS; i++)
+		stddev += (data->intervals[i] - avg) *
+			  (data->intervals[i] - avg);
+
+	stddev = stddev / INTERVALS;
 
 
-	if (((avg > stddev * 6) && (divisor * 4 >= INTERVALS * 3))
-	              || stddev <= 20) { 
+	if (avg && stddev < STDDEV_THRESH) {
 		data->predicted_us = avg;
 		ret = 1;
-	return ret;
-
-	} else if ((divisor * 4) > INTERVALS * 3) {
-		/* Exclude the max interval */
-		thresh = max - 1;
-		goto again; 
 	}
 
 	return ret;
@@ -220,7 +203,7 @@ static int menu_select(struct cpuidle_driver *drv, struct cpuidle_device *dev)
 	data->predicted_us = div_round64(data->expected_us * data->correction_factor[data->bucket],
 					 RESOLUTION * DECAY);
 
-	repeat = get_typical_interval(data);
+	repeat = detect_repeating_patterns(data);
 
 	if (data->expected_us > 5 &&
 		dev->states_usage[CPUIDLE_DRIVER_STATE_START].disable == 0)
